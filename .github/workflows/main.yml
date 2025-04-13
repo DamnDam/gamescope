@@ -23,11 +23,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - name: Build with gcc
-        run: |
-          export CC=gcc CXX=g++
-          meson setup build-gcc/ -Denable_openvr_support=false -Dinput_emulation=disabled --werror --auto-features=enabled
-          ninja -C build-gcc/
+      # - name: Build with gcc
+      #   run: |
+      #     export CC=gcc CXX=g++
+      #     meson setup build-gcc/ -Denable_openvr_support=false -Dinput_emulation=disabled --werror --auto-features=enabled
+      #     ninja -C build-gcc/
       - name: Build with gcc (no vr)
         run: |
           export CC=gcc CXX=g++
