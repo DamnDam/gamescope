@@ -2298,49 +2298,6 @@ static void wlserver_constrain_cursor( struct wlr_pointer_constraint_v1 *pNewCon
 	wlr_pointer_constraint_v1_send_activated( pNewConstraint );
 }
 
-static void handle_pointer_constraint_set_region(struct wl_listener *listener, void *data)
-{
-	GamescopePointerConstraint *pGamescopeConstraint = wl_container_of(listener, pGamescopeConstraint, set_region);
-
-	// If the region has been updated, we might need to warp again next commit.
-	wlserver.mouse_constraint_requires_warp = true;
-}
-
-void handle_constraint_destroy(struct wl_listener *listener, void *data)
-{
-	GamescopePointerConstraint *pGamescopeConstraint = wl_container_of(listener, pGamescopeConstraint, destroy);
-
-	wl_list_remove(&pGamescopeConstraint->set_region.link);
-	wl_list_remove(&pGamescopeConstraint->destroy.link);
-
-	struct wlr_pointer_constraint_v1 *pCurrentConstraint = wlserver.GetCursorConstraint();
-	if ( pCurrentConstraint == pGamescopeConstraint->pConstraint )
-	{
-		wlserver_warp_to_constraint_hint();
-
-		wlserver.SetMouseConstraint( nullptr );
-	}
-
-	delete pGamescopeConstraint;
-}
-
-static void handle_pointer_constraint(struct wl_listener *listener, void *data)
-{
-	struct wlr_pointer_constraint_v1 *pConstraint = (struct wlr_pointer_constraint_v1 *) data;
-
-	GamescopePointerConstraint *pGamescopeConstraint = new GamescopePointerConstraint;
-	pGamescopeConstraint->pConstraint = pConstraint;
-
-	pGamescopeConstraint->set_region.notify = handle_pointer_constraint_set_region;
-	wl_signal_add(&pConstraint->events.set_region, &pGamescopeConstraint->set_region);
-
-	pGamescopeConstraint->destroy.notify = handle_constraint_destroy;
-	wl_signal_add(&pConstraint->events.destroy, &pGamescopeConstraint->destroy);
-
-	if ( wlserver.kb_focus_surface && wlserver.kb_focus_surface == pConstraint->surface )
-		wlserver_constrain_cursor(pConstraint);
-}
-
 static bool wlserver_apply_constraint( double *dx, double *dy )
 {
 	struct wlr_pointer_constraint_v1 *pConstraint = wlserver.GetCursorConstraint();
@@ -2411,7 +2368,7 @@ void wlserver_mousewarp( double x, double y, uint32_t time, bool bSynthetic )
 
 	wlserver_oncursorevent();
 
-	wlr_seat_pointer_notify_motion( wlserver.wlr.seat, time, wlserver.mouse_surface_cursorx, wlserver.mouse_surface_cursory );
+	wlr_seat_pointer_notify_motion( wlserver.wlr.seat, time, x, y );
 	wlr_seat_pointer_notify_frame( wlserver.wlr.seat );
 }
 
@@ -2434,13 +2391,15 @@ void wlserver_mousebutton( int button, bool press, uint32_t time )
 	wlr_seat_pointer_notify_frame( wlserver.wlr.seat );
 }
 
-void wlserver_mousewheel( double flX, double flY, uint32_t time )
-{
-	assert( wlserver_is_lock_held() );
+void wlserver_mousewheel(double flX, double flY, uint32_t time, uint32_t axisSource) {
+    assert(wlserver_is_lock_held());
 
-	wlr_seat_pointer_notify_axis( wlserver.wlr.seat, time, WL_POINTER_AXIS_HORIZONTAL_SCROLL, flX, flX * WLR_POINTER_AXIS_DISCRETE_STEP, WL_POINTER_AXIS_SOURCE_WHEEL, WL_POINTER_AXIS_RELATIVE_DIRECTION_IDENTICAL );
-	wlr_seat_pointer_notify_axis( wlserver.wlr.seat, time, WL_POINTER_AXIS_VERTICAL_SCROLL, flY, flY * WLR_POINTER_AXIS_DISCRETE_STEP, WL_POINTER_AXIS_SOURCE_WHEEL, WL_POINTER_AXIS_RELATIVE_DIRECTION_IDENTICAL );
-	wlr_seat_pointer_notify_frame( wlserver.wlr.seat );
+    // Détecter la source de l'axe et ajuster les notifications
+    enum wl_pointer_axis_source source = (axisSource == WL_POINTER_AXIS_SOURCE_FINGER) ? WL_POINTER_AXIS_SOURCE_FINGER : WL_POINTER_AXIS_SOURCE_WHEEL;
+
+    wlr_seat_pointer_notify_axis(wlserver.wlr.seat, time, WL_POINTER_AXIS_HORIZONTAL_SCROLL, flX, flX * WLR_POINTER_AXIS_DISCRETE_STEP, source, WL_POINTER_AXIS_RELATIVE_DIRECTION_IDENTICAL);
+    wlr_seat_pointer_notify_axis(wlserver.wlr.seat, time, WL_POINTER_AXIS_VERTICAL_SCROLL, flY, flY * WLR_POINTER_AXIS_DISCRETE_STEP, source, WL_POINTER_AXIS_RELATIVE_DIRECTION_IDENTICAL);
+    wlr_seat_pointer_notify_frame(wlserver.wlr.seat);
 }
 
 void wlserver_send_frame_done( struct wlr_surface *surf, const struct timespec *when )
